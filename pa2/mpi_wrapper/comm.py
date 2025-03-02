@@ -1,5 +1,6 @@
 from mpi4py import MPI
 import numpy as np
+import math
 
 class Communicator(object):
     def __init__(self, comm: MPI.Comm):
@@ -73,20 +74,33 @@ class Communicator(object):
           - For non-root processes: one send and one receive.
           - For the root process: (n-1) receives and (n-1) sends.
         """
-        assert src_array.size == dest_array.size, "src and dest arrays must be the same size"
         size = self.Get_size()
         rank = self.Get_rank()
-        src_byte = src_array.itemsize * src_array.size
-        dest_byte = dest_array.itemsize * dest_array.size
 
-        if rank == 0:
-            self.total_bytes_transferred += (size - 1) * (src_byte + dest_byte)
+        src_array = np.ascontiguousarray(src_array)
+        result = src_array.copy()
+        temp = np.empty_like(result)
+        
+        rounds = int(math.log2(size))
+        msg_bytes = src_array.nbytes
+        self.total_bytes_transferred += 2 * rounds * msg_bytes
+        
+        if op == MPI.SUM:
+            red_op = lambda a, b: np.add(a, b, out=a)
+        elif op == MPI.MAX:
+            red_op = lambda a, b: np.maximum(a, b, out=a)
+        elif op == MPI.MIN:
+            red_op = lambda a, b: np.minimum(a, b, out=a)
         else:
-            self.total_bytes_transferred += src_byte + dest_byte
+            raise ValueError("Unsupported reduction operator")
 
-        self.comm.Reduce(src_array, dest_array, op=op, root=0)
+        for i in range(rounds):
+            partner = rank ^ (1 << i)
+            self.comm.Sendrecv(sendbuf=result, dest=partner,
+                            recvbuf=temp, source=partner)
+            red_op(result, temp)
 
-        self.comm.Bcast(dest_array, root=0)
+        dest_array[:] = result
 
     def myAlltoall(self, src_array, dest_array):
         """
