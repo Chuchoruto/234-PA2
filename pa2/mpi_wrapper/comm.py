@@ -105,24 +105,32 @@ class Communicator(object):
         """
         nprocs = self.Get_size()
         rank = self.Get_rank()
-
+        
         assert src_array.size % nprocs == 0, "src_array size must be divisible by nprocs"
         assert dest_array.size % nprocs == 0, "dest_array size must be divisible by nprocs"
-
+        
         seg_size = src_array.size // nprocs
         seg_bytes = src_array.itemsize * seg_size
-
         self.total_bytes_transferred += 2 * seg_bytes * (nprocs - 1)
-
-        local_idx = rank * seg_size
-        np.copyto(dest_array[local_idx:local_idx+seg_size],
-                src_array[local_idx:local_idx+seg_size])
-
-        gathered = np.empty(nprocs * src_array.size, dtype=src_array.dtype)
-        self.comm.Allgather(src_array, gathered)
-
-        for p in range(nprocs):
-            start = p * src_array.size + rank * seg_size
-            end = start + seg_size
-            np.copyto(dest_array[p * seg_size:(p + 1) * seg_size],
-                    gathered[start:end])
+        
+        src_array = np.ascontiguousarray(src_array)
+        dest_array = np.ascontiguousarray(dest_array)
+        
+        src_mv = memoryview(src_array)
+        dest_mv = memoryview(dest_array)
+        
+        local_start = rank * seg_size
+        local_end = local_start + seg_size
+        dest_mv[local_start:local_end] = src_mv[local_start:local_end]
+        
+        for i in range(1, nprocs):
+            send_to = (rank + i) % nprocs
+            recv_from = (rank - i + nprocs) % nprocs
+            send_start = send_to * seg_size
+            send_end = send_start + seg_size
+            recv_start = recv_from * seg_size
+            recv_end = recv_start + seg_size
+            self.comm.Sendrecv(src_mv[send_start:send_end],
+                            dest=send_to,
+                            recvbuf=dest_mv[recv_start:recv_end],
+                            source=recv_from)
