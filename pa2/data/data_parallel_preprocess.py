@@ -42,4 +42,16 @@ def split_data(
         - Do not shuffle the data indices as shuffling will be done later.
     """
 
-    #TODO: Your code here
+    data_num = x_train.shape[0]
+    per_dp_size = data_num // dp_size
+    
+    dp_group = rank // mp_size  # data parallel group index for the current rank
+    
+    # Calculate start and end indices for the current DP group's data
+    start_idx = dp_group * per_dp_size
+    end_idx = start_idx + per_dp_size
+    
+    split_x_train = x_train[start_idx:end_idx]
+    split_y_train = y_train[start_idx:end_idx]
+    
+    return split_x_train, split_y_train
