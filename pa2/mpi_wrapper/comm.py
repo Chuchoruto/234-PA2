@@ -77,20 +77,15 @@ class Communicator(object):
         size = self.Get_size()
         rank = self.Get_rank()
         src_byte = src_array.itemsize * src_array.size
-        dest_byte = dest_array.itemsize * dest_array.size  # Equal to src_byte due to assert
+        dest_byte = dest_array.itemsize * dest_array.size
 
-        # Update byte count based on role
         if rank == 0:
-            # Root receives (size-1) src_bytes and sends (size-1) dest_bytes
             self.total_bytes_transferred += (size - 1) * (src_byte + dest_byte)
         else:
-            # Non-root sends one src_byte and receives one dest_byte
             self.total_bytes_transferred += src_byte + dest_byte
 
-        # Step 1: Reduce all data to root (rank 0) using the specified operation
         self.comm.Reduce(src_array, dest_array, op=op, root=0)
 
-        # Step 2: Broadcast the result from root to all processes
         self.comm.Bcast(dest_array, root=0)
 
     def myAlltoall(self, src_array, dest_array):

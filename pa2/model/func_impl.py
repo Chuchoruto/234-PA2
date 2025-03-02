@@ -55,7 +55,6 @@ def get_info(
     mp_comm = comm.Split(color=dp_idx, key=mp_idx)
     dp_comm = comm.Split(color=mp_idx, key=dp_idx)
 
-    # Determine partitioned dimensions based on the layer type
     if fc_layer in ['fc_q', 'fc_k', 'fc_v']:
         part_out_dim = out_dim // mp_size
         part_in_dim = in_dim
